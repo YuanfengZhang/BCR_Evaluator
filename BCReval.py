@@ -203,9 +203,9 @@ def read_fastq(f_path: Path, chunk_size: int) -> Iterator[list[str]]:
     }
 
     with read_methods.get(f_path.suffix[: -3],
-                          lambda f: open(f, 'r'))(f_path) as f:
+                          lambda f: open(f, 'r'))(f_path) as fastq_io:
         while True:
-            chunk = list(islice(f, chunk_size * 4))
+            chunk = list(islice(fastq_io, chunk_size * 4))
             if not chunk:
                 break
             yield chunk
