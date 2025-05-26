@@ -45,7 +45,7 @@ Usage:
 ```bash
 python BCREval.py \
   -i {input} \  # can be .fq, .fq.gz, .fq.zst
-  -o {output} \  the parent dir will be created if it does not exist
+  -o {output} \  # the parent dir will be created if it does not exist
   -t {threads} \  # optional, default is 1
   -c {chunk_size} \  # optional, default is 1000000
   -v {verbose}  # optional, debug / info / warning / error / critical
