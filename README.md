@@ -1,39 +1,72 @@
 # BCREval
-BCREval is used to evaluate bisulfite conversion ratio in WGSBS experiment
+>[!IMPORTANT]
+> This is a customized version of BCREval, with parallelization and acceleration powered by C++.
+> The original version can be found [here](https://github.com/hqyone/BCR_Evaluator)
+> The following readme info is also changed.
+BCREval is used to evaluate base conversion rate in WGBS/RRBS/EM-seq experiments. It will support TAPS soon.
 
-Whole genome shotgun bisulfite sequencing (WGSBS) also known as BS-seq has been widely used to measure the methylation of whole genome at single-base resolution. One of the key steps in the assay is converting unmethylated cytosines into thymines (BS conversion). Incomplete conversion of unmethylated cytosines can introduces false positive methylation call. Developing a quick method to evaluate bisulfite conversion ratio (BCR) is benefit for both quality control and data analysis of WGSBS. Here BCReval is a small python script to estimate the unconverted rate (UCR) by using telomeric repetitive DNA as native spike-in control.
+Pull requests are welcome.
+
+## Todo
+1. Add support for TAPS
+2. Distribute this as a pypi package.
 
 ## References
 Zhou J, Zhao M, Sun Z, Wu F, Liu Y, Liu X, He Z, He Q, He Q. BCREval: a computational method to estimate the bisulfite conversion ratio in WGBS. BMC Bioinformatics. 2020 Jan 31;21(1):38. doi: 10.1186/s12859-019-3334-z. PMID: 32005131; PMCID: PMC6995172.
 
-## Usage information
-Usage: python BCReval.py -n <rep_number> -i <input_files> -o <output_file>
+## Installation
+1. create a conda env
+```bash
+mamba create -n pybind -c conda-forge \
+  python=3.13 scipy pybind11 zstandard
+```
 
-The input_file should be a FASTQ file or a list of FASTQ files which are seperated by commas. 
-It has been tested in python 2.7
+or
+```bash
+uv python install 3.13 && cd BCR_Evaluator && \
+   uv python pin 3.13 && uv init && uv add pybind11
+```
+
+2. compile the c++ module using g++
+```bash
+g++ -O3 -shared -std=c++11 -fPIC $(python3-config --includes) \
+     telomere_parser.cpp \
+     -o telomere_parser$(python3-config --extension-suffix)
+```
+or use modify the cpp file (PyModuleDef -> PYBIND11_MODULE) and compile it with pybind11.
+```bash
+c++ -O3 -shared -std=c++11 -fPIC $(python3-config --includes) \
+     telomere_parser.cpp \
+     -o telomere_parser$(python3-config --extension-suffix)
+```
+
+## Usage information
+Usage:
+```bash
+python BCREval.py \
+  -i {input} \  # can be .fq, .fq.gz, .fq.zst
+  -o {output} \  the parent dir will be created if it does not exist
+  -t {threads} \  # optional, default is 1
+  -c {chunk_size} \  # optional, default is 1000000
+  -v {verbose}  # optional, debug / info / warning / error / critical
+  2 > {error.log}  # The stderr could be very long, prepare.
+```
 
 ## Output format
-The output is a string including 15 fields which are seperated by tabs.
-
-Example:
-/home/server3/data2/zmq/ENCFF156UKB.fastq.gz	+	8	925473550	125151	0	2022759	90386	0,273921715,20071116,304864,21496,9547,9123,9530,9139,8617,8387,7941,7707,7244,6903,6392,5836,5323,4954,4450,4221,4119,3765,3524,16106,6095,0,0,0,0	83503771,542711711,4739860,42520,2172,544,250,180,176,108,111,107,111,110,96,76,105,102,109,163,163,210,194,200,1713,574,0,0,0,0	89547,290,300,244,0,4,1,0	304,76,2761,91,1383,4504,5226,1918028	0.0032	0.0034	0.0028
-
-In which:
-1. File: home/server3/data2/zmq/ENCFF329YKL.fastq.gz
-2. Type : +             //from FASTQ_1(+) or FASTQ_2(-)
-3. Min_unit_count : 8   //The minimal number of telomeric rep units
-4. Total_reads: 925473550  //Total number of reads in the FASTQ file
-5. Telomeric reads: 125151 . // Telomeric reads numbers
-6. Total_n3_reads:0     //The total number of reads which contain N3 units that has three methylated cytosines 
-7. total_unit_num:2022759 . //The number of telomeric units in the files (All reads)
-8. c_strand_unit_num: 90386 . //The number of telomeric units of C-strand derived telomeric reads
-9. g_len_series:0,273921715,20071116,....6095,0,0,0,0 . // The number of reads containing certain number of G-telomeric derived units (TTAGGG). For example here 273921715 is the number of reads containing one G-unit.
-10. c_len_series:83503771,542711711,4739860,....574,0,0,0,0 . // The number of reads containing certain number of C-telomeric derived units (CCCTAA).
-11. a_count_series:89547,290,300,244,0,4,1,0  //The numbers of all possible units (A series, from FASTQ_1)
-12. b_count_series:304,76,2761,91,1383,4504,5226,1918028  //The numbers of all possible units (B series, from FASTQ_2), you can omit it here because this data is from FASTQ1 file.
-13. rc1: 0.0032 . //The unconverted/methylated ratio of the first C
-14. rc2: 0.0034 . //The unconverted/methylated ratio of the second C
-15. rc3: 0.0028 . //The unconverted/methylated ratio of the third C
-
-## Conversion ratio (CR)
-CR = 1-Mean(rc1, rc2, rc3)
+> [!NOTE]
+> The output format is concise and very differnt from the original version.
+The output is a tsv file containing the following columns:
++ **input_fname**: The file name of your input file.
++ **strand**: C / G
++ **total_reads**: The total number of reads in the FASTQ file.
++ **telomeric_reads**: The number of reads containing telomeric repeats.
++ **completely_converted_unit_counts**: The number of completely converted telomeric units.
++ **total_n3_reads**: The total number of reads which contain N3 units that has three methylated cytosines.
++ **strand_seq_counts**: The counter of telomeric units of C-strand derived telomeric reads.
++ **r1**: The unconverted/methylated ratio of the first C.
++ **r2**: The unconverted/methylated ratio of the second C.
++ **r3**: The unconverted/methylated ratio of the third C.
++ **<code style="color : red">optimized_conversion_rate</code>**: base conversion rate calculated and optimized by [L-BFGS-B](https://en.wikipedia.org/wiki/Limited-memory_BFGS) which may be more accurate than the original method.
++ **<code style="color : red">estimated_conversion_rate</code>**: 1 - (r1 + r2 + r3) / 3. This is the approach authors use.
++ **<code style="color : red">conversion_rate_r1r2</code>**: r2 / (r1 + r2). Ignore r3 for robustness. Please read the paper mentioned above for details.
++ **<code style="color : red">conversion_rate_r3</code>**: 1 - r3 ** (1 / 3). Only use r3.
